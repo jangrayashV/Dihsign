@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { technologyComponentRegistry } from './technologyRegistry';
 import {
   Activity, BadgeCheck, Cable, CalendarClock, ChartNoAxesCombined, Cloud, Cog, Component, Container,
   Database, Disc3, Folder, Gauge, Globe2, HardDriveUpload, KeyRound, Laptop, Layers3, ListOrdered,
@@ -10,19 +11,27 @@ export type ComponentCategory =
   | 'Clients' | 'Compute' | 'Networking' | 'Databases' | 'Caching'
   | 'Messaging' | 'Storage' | 'Observability' | 'Security' | 'Other';
 
+export type TechnologyCategory =
+  | 'Databases' | 'Caching & Messaging' | 'Networking & Delivery'
+  | 'Containers & Infrastructure' | 'CI/CD & Development'
+  | 'Observability' | 'Cloud & Storage' | 'AI & Data Engineering';
+
 export type ComponentProperties = Record<string, string | number | boolean>;
 
 export type ComponentDefinition = {
   id: string;
   name: string;
-  category: ComponentCategory;
-  icon: LucideIcon;
+  category: ComponentCategory | TechnologyCategory;
+  icon?: LucideIcon;
+  iconAsset?: string;
+  iconTreatment?: 'light-surface';
+  library?: 'generic' | 'technology';
   aliases: readonly string[];
   keywords: readonly string[];
   defaultProperties: ComponentProperties;
 };
 
-export const componentRegistry = {
+const genericComponentRegistry = {
   browser: {
     id: 'browser', name: 'Browser', category: 'Clients', icon: Globe2,
     aliases: ['web client', 'web browser'], keywords: ['client', 'frontend', 'http', 'https'],
@@ -234,9 +243,15 @@ export const componentRegistry = {
   },
 } as const satisfies Record<string, ComponentDefinition>;
 
+export const componentRegistry = {
+  ...genericComponentRegistry,
+  ...technologyComponentRegistry,
+};
+
 export type ComponentId = keyof typeof componentRegistry;
 
 export const componentDefinitions = Object.values(componentRegistry);
+export const genericComponentDefinitions = Object.values(genericComponentRegistry);
 
 export function isComponentId(value: string): value is ComponentId {
   return value in componentRegistry;

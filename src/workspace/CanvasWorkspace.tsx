@@ -41,15 +41,17 @@ import {
 import { componentDefinitions, componentRegistry, isComponentId } from './componentRegistry';
 import type { ComponentId } from './componentRegistry';
 import { InfrastructureNode } from './InfrastructureNode';
-import type { InfrastructureNodeType } from './InfrastructureNode';
 import { arrowStyles, edgeStrokeDasharray, getManualEdgePath, InfrastructureEdge } from './InfrastructureEdge';
-import type { ArrowStyle, InfrastructureEdgeType } from './InfrastructureEdge';
+import type { InfrastructureEdgeType } from './InfrastructureEdge';
 import { TextNode } from './TextNode';
-import type { TextNodeType } from './TextNode';
 import { ShapeNode } from './ShapeNode';
-import type { ShapeKind, ShapeNodeType } from './ShapeNode';
+import type { ShapeKind } from './ShapeNode';
 import { ElementStylePanel, elementColorValue } from './ElementStylePanel';
-import type { ElementColor, ElementStyleMode } from './ElementStylePanel';
+import { DocumentControls } from './DocumentControls';
+import { DocumentLibrary } from './DocumentLibrary';
+import { useDiagramDocuments } from './useDiagramDocuments';
+import type { ArrowBinding, CanvasNode, FreeArrow, SnapSide } from './diagramDocument';
+import { RegistryIcon } from './RegistryIcon';
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 4;
@@ -127,22 +129,6 @@ function TooltipLayer() {
 }
 
 type Tool = 'select' | 'hand' | 'rectangle' | 'circle' | 'diamond' | 'text' | 'arrow';
-type CanvasNode = InfrastructureNodeType | TextNodeType | ShapeNodeType;
-type SnapSide = 'top' | 'right' | 'bottom' | 'left';
-type ArrowBinding = { nodeId: string; side: SnapSide };
-type FreeArrow = {
-  id: string;
-  start: XYPosition;
-  end: XYPosition;
-  label?: string;
-  startBinding?: ArrowBinding;
-  endBinding?: ArrowBinding;
-  arrowStyle?: ArrowStyle;
-  color?: ElementColor;
-  colorStyle?: ElementStyleMode;
-  fixedSegment?: { axis: 'x' | 'y'; value: number };
-};
-
 type RouteRect = { x: number; y: number; width: number; height: number; id: string };
 
 function canvasNodeSize(node: CanvasNode) {
@@ -435,9 +421,15 @@ function ShortcutGuide({ onClose }: { onClose: () => void }) {
 }
 
 function ComponentLibrary({ onAdd }: { onAdd: (componentId: ComponentId) => void }) {
+  const [activeLibrary, setActiveLibrary] = useState<'generic' | 'technology'>('generic');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const groups = componentDefinitions.reduce((grouped, definition) => {
+  const visibleDefinitions = componentDefinitions.filter((definition) => (
+    activeLibrary === 'technology'
+      ? 'library' in definition && definition.library === 'technology'
+      : !('library' in definition) || definition.library !== 'technology'
+  ));
+  const groups = visibleDefinitions.reduce((grouped, definition) => {
     const current = grouped.get(definition.category) ?? [];
     current.push(definition);
     grouped.set(definition.category, current);
@@ -446,7 +438,7 @@ function ComponentLibrary({ onAdd }: { onAdd: (componentId: ComponentId) => void
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const searchResults = normalizedQuery
-    ? componentDefinitions.filter((definition) => [
+    ? visibleDefinitions.filter((definition) => [
       definition.name,
       definition.category,
       ...definition.aliases,
@@ -461,17 +453,32 @@ function ComponentLibrary({ onAdd }: { onAdd: (componentId: ComponentId) => void
       <aside className="component-library" aria-label="Component library">
         <div className="library-heading">
           <div>
-            <strong>Components</strong>
-            <span>Choose a category</span>
+            <strong>{activeLibrary === 'technology' ? 'Technologies' : 'Generic Components'}</strong>
           </div>
+        </div>
+        <div className="library-section-tabs" role="tablist" aria-label="Component libraries">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeLibrary === 'generic'}
+            className={activeLibrary === 'generic' ? 'is-active' : undefined}
+            onClick={() => { setActiveLibrary('generic'); setActiveCategory(null); setSearchQuery(''); }}
+          >Generic</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeLibrary === 'technology'}
+            className={activeLibrary === 'technology' ? 'is-active' : undefined}
+            onClick={() => { setActiveLibrary('technology'); setActiveCategory(null); setSearchQuery(''); }}
+          >Technologies</button>
         </div>
         <label className="library-search">
           <Search size={14} aria-hidden="true" />
           <input
             type="search"
             value={searchQuery}
-            placeholder="Search components"
-            aria-label="Search components"
+            placeholder={activeLibrary === 'technology' ? 'Search technologies' : 'Search components'}
+            aria-label={activeLibrary === 'technology' ? 'Search technologies' : 'Search generic components'}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
         </label>
@@ -515,7 +522,6 @@ function ComponentLibrary({ onAdd }: { onAdd: (componentId: ComponentId) => void
           </header>
           <div className="library-category-grid">
             {activeDefinitions.map((definition) => {
-              const Icon = definition.icon;
               return (
                 <button
                   type="button"
@@ -528,7 +534,7 @@ function ComponentLibrary({ onAdd }: { onAdd: (componentId: ComponentId) => void
                     event.dataTransfer.effectAllowed = 'copy';
                   }}
                 >
-                  <span className="library-item-icon"><Icon size={20} strokeWidth={1.6} aria-hidden="true" /></span>
+                  <span className="library-item-icon"><RegistryIcon definition={definition} size={20} /></span>
                   <strong>{definition.name}</strong>
                 </button>
               );
@@ -609,11 +615,22 @@ function Canvas() {
   const [freeArrowStyling, setFreeArrowStyling] = useState(false);
   const [freeArrowLabelEditing, setFreeArrowLabelEditing] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [documentLibraryOpen, setDocumentLibraryOpen] = useState(false);
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<InfrastructureEdgeType>([]);
   const { getViewport, screenToFlowPosition, setViewport, zoomIn, zoomOut } = useReactFlow();
   const viewport = useViewport();
+  const documentState = useDiagramDocuments({
+    nodes,
+    edges,
+    freeArrows,
+    viewport,
+    setNodes,
+    setEdges,
+    setFreeArrows,
+    setViewport,
+  });
   const nodeTypes = useMemo<NodeTypes>(() => ({ infrastructure: InfrastructureNode, text: TextNode, shape: ShapeNode }), []);
   const edgeTypes = useMemo<EdgeTypes>(() => ({ infrastructure: InfrastructureEdge }), []);
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -1287,8 +1304,27 @@ function Canvas() {
     + edges.filter((edge) => edge.selected).length
     + selectedArrowCount > 1;
 
+  const documentControlsHost = document.getElementById('document-controls-host');
+
   return (
-    <main
+    <>
+      {documentControlsHost && createPortal(
+        <DocumentControls
+          activeName={documentState.activeDocument?.name}
+          status={documentState.status}
+          error={documentState.error}
+          onNew={documentState.newDocument}
+          onDelete={documentState.removeActive}
+          browseOpen={documentLibraryOpen}
+          onBrowse={() => setDocumentLibraryOpen((open) => !open)}
+          onExport={documentState.exportJson}
+          onImport={documentState.importJson}
+          onRetry={documentState.retrySave}
+          onReload={documentState.reloadActive}
+        />,
+        documentControlsHost,
+      )}
+      <main
       ref={canvasRef}
       className={`canvas-region tool-${activeTool}${hasMultipleSelection ? ' has-multiple-selection' : ''}`}
       aria-label="Diagram canvas"
@@ -1314,11 +1350,26 @@ function Canvas() {
       <CanvasChrome
         activeTool={activeTool}
         libraryOpen={libraryOpen}
-        onLibraryToggle={() => setLibraryOpen((open) => !open)}
+        onLibraryToggle={() => {
+          setLibraryOpen((open) => !open);
+          setDocumentLibraryOpen(false);
+        }}
         onShortcutGuideToggle={() => setShortcutGuideOpen((open) => !open)}
         onToolChange={changeTool}
         shortcutGuideOpen={shortcutGuideOpen}
       />
+      {documentLibraryOpen && (
+        <DocumentLibrary
+          documents={documentState.documents}
+          activeId={documentState.activeDocument?.id}
+          onClose={() => setDocumentLibraryOpen(false)}
+          onDelete={documentState.removeDocuments}
+          onNew={documentState.newDocument}
+          onReorder={documentState.reorderDocumentList}
+          onRename={documentState.renameDocument}
+          onSelect={documentState.selectDocument}
+        />
+      )}
       {libraryOpen && <ComponentLibrary onAdd={addComponent} />}
       {shortcutGuideOpen && <ShortcutGuide onClose={() => setShortcutGuideOpen(false)} />}
       {showReturnToContent && (
@@ -1523,7 +1574,8 @@ function Canvas() {
           </div>
         );
       })()}
-    </main>
+      </main>
+    </>
   );
 }
 
@@ -1534,6 +1586,7 @@ export function CanvasWorkspace() {
         <header className="workspace-header">
           <span className="workspace-name">Canvas</span>
           <span className="workspace-description">CS workspace</span>
+          <div id="document-controls-host" />
         </header>
         {/* A grid shell leaves room for a future library rail without coupling it to the viewport. */}
         <div className="workspace-body">

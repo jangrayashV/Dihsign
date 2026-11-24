@@ -136,7 +136,12 @@ export function InfrastructureEdge({ id, data, markerEnd, selected, sourceX, sou
 
   useEffect(() => () => stopDraggingRef.current?.(), []);
   useEffect(() => {
-    if (!selected) setStyling(false);
+    if (!selected) {
+      setStyling(false);
+      setCustomizing(false);
+      setDescribing(false);
+      setReplacing(false);
+    }
   }, [selected]);
 
   function updateVisualStyle(update: { color?: ElementColor; colorStyle?: ElementStyleMode }) {

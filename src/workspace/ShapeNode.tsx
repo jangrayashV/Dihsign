@@ -5,6 +5,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { BringToFront, Palette, SendToBack, StepBack, StepForward, Trash2 } from 'lucide-react';
 import { ElementStylePanel, elementColorValue } from './ElementStylePanel';
 import type { ElementColor, ElementStyleMode } from './ElementStylePanel';
+import { moveNodeLayer } from './nodeLayering';
 
 export type ShapeKind = 'rectangle' | 'ellipse' | 'diamond';
 
@@ -37,22 +38,7 @@ export function ShapeNode({ data, draggable, dragging, id, selected }: NodeProps
   }
 
   function moveLayer(action: 'front' | 'forward' | 'backward' | 'back') {
-    setNodes((nodes) => {
-      const index = nodes.findIndex((node) => node.id === id);
-      if (index < 0) return nodes;
-      const target = action === 'front'
-        ? nodes.length - 1
-        : action === 'forward'
-          ? Math.min(nodes.length - 1, index + 1)
-          : action === 'backward'
-            ? Math.max(0, index - 1)
-            : 0;
-      if (target === index) return nodes;
-      const reordered = [...nodes];
-      const [node] = reordered.splice(index, 1);
-      reordered.splice(target, 0, node);
-      return reordered;
-    });
+    setNodes((nodes) => moveNodeLayer(nodes, id, action));
   }
 
   return (
@@ -79,18 +65,10 @@ export function ShapeNode({ data, draggable, dragging, id, selected }: NodeProps
               <Palette size={15} aria-hidden="true" />
             </button>
             <span className="node-action-divider" aria-hidden="true" />
-            <button type="button" data-tooltip="Bring to front" aria-label="Bring shape to front" onClick={() => moveLayer('front')}>
-              <BringToFront size={15} aria-hidden="true" />
-            </button>
-            <button type="button" data-tooltip="Bring forward" aria-label="Bring shape forward" onClick={() => moveLayer('forward')}>
-              <StepForward size={15} aria-hidden="true" />
-            </button>
-            <button type="button" data-tooltip="Send backward" aria-label="Send shape backward" onClick={() => moveLayer('backward')}>
-              <StepBack size={15} aria-hidden="true" />
-            </button>
-            <button type="button" data-tooltip="Send to back" aria-label="Send shape to back" onClick={() => moveLayer('back')}>
-              <SendToBack size={15} aria-hidden="true" />
-            </button>
+            <button type="button" data-tooltip="Bring to front" aria-label="Bring shape to front" onClick={() => moveLayer('front')}><BringToFront size={15} aria-hidden="true" /></button>
+            <button type="button" data-tooltip="Bring forward" aria-label="Bring shape forward" onClick={() => moveLayer('forward')}><StepForward size={15} aria-hidden="true" /></button>
+            <button type="button" data-tooltip="Send backward" aria-label="Send shape backward" onClick={() => moveLayer('backward')}><StepBack size={15} aria-hidden="true" /></button>
+            <button type="button" data-tooltip="Send to back" aria-label="Send shape to back" onClick={() => moveLayer('back')}><SendToBack size={15} aria-hidden="true" /></button>
             <span className="node-action-divider" aria-hidden="true" />
             <button type="button" className="delete-action" data-tooltip="Delete" aria-label="Delete shape" onClick={() => setNodes((nodes) => nodes.filter((node) => node.id !== id))}>
               <Trash2 size={15} aria-hidden="true" />
@@ -101,7 +79,7 @@ export function ShapeNode({ data, draggable, dragging, id, selected }: NodeProps
       <div className={`shape-node shape-${data.shape}${selected ? ' is-selected' : ''}`} style={shapeVariables}>
         {data.shape === 'diamond' ? (
           <svg className="shape-diamond-surface" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Conditional diamond">
-            <polygon points="50,1 99,50 50,99 1,50" />
+            <path d="M 48.5 3.5 Q 50 2 51.5 3.5 L 96.5 48.5 Q 98 50 96.5 51.5 L 51.5 96.5 Q 50 98 48.5 96.5 L 3.5 51.5 Q 2 50 3.5 48.5 Z" />
           </svg>
         ) : <div className="shape-surface" />}
       </div>

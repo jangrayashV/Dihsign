@@ -7,6 +7,8 @@ import { componentDefinitions, componentRegistry } from './componentRegistry';
 import type { ComponentId, ComponentProperties } from './componentRegistry';
 import { ElementStylePanel, elementColorValue } from './ElementStylePanel';
 import type { ElementColor, ElementStyleMode } from './ElementStylePanel';
+import { RegistryIcon } from './RegistryIcon';
+import { moveNodeLayer } from './nodeLayering';
 
 export type InfrastructureNodeData = {
   instanceId: string;
@@ -26,7 +28,6 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
   const [labelDraft, setLabelDraft] = useState(data.label ?? '');
   const { setNodes } = useReactFlow<InfrastructureNodeType>();
   const definition = componentRegistry[data.componentId];
-  const Icon = definition.icon;
   const color = data.color ?? 'gray';
   const colorStyle = data.colorStyle ?? 'subtle';
   const colorValue = elementColorValue(color);
@@ -40,7 +41,11 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
   } as CSSProperties;
 
   useEffect(() => {
-    if (!selected) setStyling(false);
+    if (!selected) {
+      setStyling(false);
+      setEditingLabel(false);
+      setReplacing(false);
+    }
   }, [selected]);
 
   function updateStyle(update: { color?: ElementColor; colorStyle?: ElementStyleMode }) {
@@ -67,22 +72,7 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
   }
 
   function moveLayer(action: 'front' | 'forward' | 'backward' | 'back') {
-    setNodes((nodes) => {
-      const index = nodes.findIndex((node) => node.id === id);
-      if (index < 0) return nodes;
-      const target = action === 'front'
-        ? nodes.length - 1
-        : action === 'forward'
-          ? Math.min(nodes.length - 1, index + 1)
-          : action === 'backward'
-            ? Math.max(0, index - 1)
-            : 0;
-      if (target === index) return nodes;
-      const reordered = [...nodes];
-      const [node] = reordered.splice(index, 1);
-      reordered.splice(target, 0, node);
-      return reordered;
-    });
+    setNodes((nodes) => moveNodeLayer(nodes, id, action));
   }
 
   return (
@@ -114,7 +104,6 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
         ) : replacing ? (
           <div className="replacement-options" aria-label="Replace component">
             {componentDefinitions.map((candidate) => {
-              const CandidateIcon = candidate.icon;
               return (
                 <button
                   type="button"
@@ -124,7 +113,7 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
                   key={candidate.id}
                   onClick={() => replaceWith(candidate.id)}
                 >
-                  <CandidateIcon size={15} aria-hidden="true" />
+                  <RegistryIcon definition={candidate} size={15} />
                 </button>
               );
             })}
@@ -134,25 +123,19 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
             <button type="button" data-tooltip="Color and style" aria-label="Edit component color and style" onClick={() => setStyling(true)}>
               <Palette size={15} aria-hidden="true" />
             </button>
-            <button type="button" data-tooltip="Edit label" aria-label="Edit component label" onClick={() => { setLabelDraft(data.label ?? ''); setEditingLabel(true); }}>
-              <Pencil size={15} aria-hidden="true" />
-            </button>
+            {(!('library' in definition) || definition.library !== 'technology') && (
+              <button type="button" data-tooltip="Edit label" aria-label="Edit component label" onClick={() => { setLabelDraft(data.label ?? ''); setEditingLabel(true); }}>
+                <Pencil size={15} aria-hidden="true" />
+              </button>
+            )}
             <button type="button" data-tooltip="Replace" aria-label="Replace component" onClick={() => setReplacing(true)}>
               <RefreshCw size={15} aria-hidden="true" />
             </button>
             <span className="node-action-divider" aria-hidden="true" />
-            <button type="button" data-tooltip="Bring to front" aria-label="Bring component to front" onClick={() => moveLayer('front')}>
-              <BringToFront size={15} aria-hidden="true" />
-            </button>
-            <button type="button" data-tooltip="Bring forward" aria-label="Bring component forward" onClick={() => moveLayer('forward')}>
-              <StepForward size={15} aria-hidden="true" />
-            </button>
-            <button type="button" data-tooltip="Send backward" aria-label="Send component backward" onClick={() => moveLayer('backward')}>
-              <StepBack size={15} aria-hidden="true" />
-            </button>
-            <button type="button" data-tooltip="Send to back" aria-label="Send component to back" onClick={() => moveLayer('back')}>
-              <SendToBack size={15} aria-hidden="true" />
-            </button>
+            <button type="button" data-tooltip="Bring to front" aria-label="Bring component to front" onClick={() => moveLayer('front')}><BringToFront size={15} aria-hidden="true" /></button>
+            <button type="button" data-tooltip="Bring forward" aria-label="Bring component forward" onClick={() => moveLayer('forward')}><StepForward size={15} aria-hidden="true" /></button>
+            <button type="button" data-tooltip="Send backward" aria-label="Send component backward" onClick={() => moveLayer('backward')}><StepBack size={15} aria-hidden="true" /></button>
+            <button type="button" data-tooltip="Send to back" aria-label="Send component to back" onClick={() => moveLayer('back')}><SendToBack size={15} aria-hidden="true" /></button>
             <span className="node-action-divider" aria-hidden="true" />
             <button type="button" className="delete-action" data-tooltip="Delete" aria-label="Delete component" onClick={() => setNodes((nodes) => nodes.filter((node) => node.id !== id))}>
               <Trash2 size={15} aria-hidden="true" />
@@ -163,7 +146,7 @@ export function InfrastructureNode({ data, draggable, dragging, id, selected }: 
 
       <div className={`infrastructure-node element-style-${colorStyle}${selected ? ' is-selected' : ''}`} style={colorVariables}>
         <div className="node-icon" aria-hidden="true">
-          <Icon size={20} strokeWidth={1.6} />
+          <RegistryIcon definition={definition} size={20} />
         </div>
         <div className="node-copy">
           <strong>{data.label || definition.name}</strong>
